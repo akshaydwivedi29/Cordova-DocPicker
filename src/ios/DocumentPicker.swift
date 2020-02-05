@@ -1,10 +1,11 @@
-
+import MobileCoreServices
 enum DocumentTypes: String {
     case pdf
     case image
     case all
     case gif
     case video
+    case audio
 
     var uti: String {
         switch self {
@@ -13,6 +14,7 @@ enum DocumentTypes: String {
             case .all: return "public.data"
             case .gif: return "com.compuserve.gif"
             case .video: return "public.movie"
+            case .audio: return "public.audio"
         }
     }
 }
@@ -58,8 +60,25 @@ class DocumentPicker : CDVPlugin {
     }
 
     func documentWasSelected(document: URL) {
-        self.sendResult(.init(status: CDVCommandStatus_OK, messageAs: document.absoluteString))
-        self.commandCallback = nil
+        var fileData: Data
+        let fileName = document.lastPathComponent
+        let mimeType = mimeTypeForPath(path: document.absoluteString)
+        var isImage: Bool = false
+        var fileSizeinBytes = 0 // get the file size in bytes
+        if mimeType.lowercased().range(of:"image") != nil {
+            isImage = true
+        }
+        do{
+            fileData =  try Data(contentsOf: document)
+            fileSizeinBytes = fileData.count
+            self.sendResult(CDVPluginResult.init(status: CDVCommandStatus_OK, messageAs:["data:"+mimeType+";base64,"+fileData.base64EncodedString(),fileName,mimeType,isImage,fileSizeinBytes]))
+            self.commandCallback = nil
+        }
+        catch
+        {
+            sendError("error reading file content")
+        }
+        
     }
 
     func sendError(_ message: String) {
@@ -77,7 +96,17 @@ private extension DocumentPicker {
         )
     }
 }
-
+func mimeTypeForPath(path: String) -> String {
+    let url = NSURL(fileURLWithPath: path)
+    let pathExtension = url.pathExtension
+    
+    if let uti = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, pathExtension! as NSString, nil)?.takeRetainedValue() {
+        if let mimetype = UTTypeCopyPreferredTagWithClass(uti, kUTTagClassMIMEType)?.takeRetainedValue() {
+            return mimetype as String
+        }
+    }
+    return "application/octet-stream"
+}
 extension DocumentPicker: UIDocumentPickerDelegate {
 
     @available(iOS 11.0, *)
